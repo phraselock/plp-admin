@@ -24,8 +24,7 @@ import java.util.stream.Collectors;
  * Reads src/main/resources/application.properties.
  * <p>
  * An external application.properties next to the JAR (or the path given via
- * the "app.config" system property) overrides the bundled defaults, so secrets
- * like the token AES key don't have to live in the JAR.
+ * the "app.config" system property) overrides the bundled defaults.
  */
 public class AppConfig
 {

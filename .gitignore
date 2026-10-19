@@ -1,12 +1,15 @@
 build/
 .gradle/
+.idea/
+!.idea/runConfigurations/
 *.class
 *.jar
 *.db
-application.properties
-keepass.properties
-mqtt.properties
-psono.properties
-smartcard.properties
-certs/CA/
+# Runtime config files in project root (contain secrets)
+/application.properties
+/keepass.properties
+/mqtt.properties
+/psono.properties
+/smartcard.properties
+/certs/CA/
 .DS_Store

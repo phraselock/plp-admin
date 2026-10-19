@@ -31,7 +31,7 @@ public class ConfigPage
             div().withStyle("display:flex;gap:20px;flex-wrap:wrap;justify-content:center;").with(
               tile("/admin/appconfig", "Application",
                 "application.properties",
-                "Port, IP allowlist, thread pool, peer config store"),
+                "Port, IP allowlist, CA directory, plp-core connection"),
               tile("/admin/mqttconfig", "MQTT",
                 "mqtt.properties",
                 "Broker URL, TLS certificates, ECC signature keys"),

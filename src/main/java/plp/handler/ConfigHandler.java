@@ -183,21 +183,34 @@ public class ConfigHandler
     if (!port.matches("\\d+") || Integer.parseInt(port) < 1 || Integer.parseInt(port) > 65535)
       w.add("server.port: not a valid port number (1–65535)");
 
-    String ips = p.getProperty("allowed.ips", "").trim();
+    String ips = p.getProperty("server.allowedIps", "").trim();
     if (ips.isBlank())
-      w.add("allowed.ips: no IPs configured — all requests will be rejected");
-
-    String store = p.getProperty("peer.config.store", "").trim().toLowerCase();
-    if (!store.equals("redis") && !store.equals("sqlite"))
-      w.add("peer.config.store: unknown value \"" + store + "\" — expected: redis | sqlite");
-
-    if (p.getProperty("admin.token", "").trim().isEmpty())
-      w.add("admin.token: not set — /admin/* routes are unprotected");
+      w.add("server.allowedIps: no IPs configured — all requests will be rejected");
 
     String minT = p.getProperty("jetty.minThreads", "").trim();
     String maxT = p.getProperty("jetty.maxThreads", "").trim();
     if (minT.matches("\\d+") && maxT.matches("\\d+") && Integer.parseInt(minT) > Integer.parseInt(maxT))
       w.add("jetty.minThreads (" + minT + ") > jetty.maxThreads (" + maxT + ")");
+
+    if (p.getProperty("admin.token", "").trim().isEmpty())
+      w.add("admin.token: not set — /admin/* routes are unprotected");
+
+    String store = p.getProperty("peer.config.store", "").trim().toLowerCase();
+    if (!store.equals("redis") && !store.equals("sqlite"))
+      w.add("peer.config.store: unknown value \"" + store + "\" — expected: redis | sqlite");
+
+    String caDir = p.getProperty("ca.directory", "").trim();
+    if (caDir.isBlank())
+      w.add("ca.directory: not configured");
+
+    String jwt = p.getProperty("pl.core.jwt", "").trim();
+    if (jwt.isBlank() || jwt.contains("<"))
+      w.add("pl.core.jwt: not configured");
+
+    String pubX = p.getProperty("pl.core.jwt.ec.pub.x", "").trim();
+    String pubY = p.getProperty("pl.core.jwt.ec.pub.y", "").trim();
+    if (pubX.isBlank() || pubY.isBlank())
+      w.add("pl.core.jwt.ec.pub.x/y: plp-core public key not configured");
 
     return w;
   }
