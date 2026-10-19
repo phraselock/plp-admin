@@ -1,0 +1,12 @@
+build/
+.gradle/
+*.class
+*.jar
+*.db
+application.properties
+keepass.properties
+mqtt.properties
+psono.properties
+smartcard.properties
+certs/CA/
+.DS_Store
