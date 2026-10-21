@@ -6,11 +6,16 @@ import io.javalin.http.Context;
 import org.json.JSONObject;
 import plp.config.AppConfig;
 import plp.crypto.IClientCertIssuer;
+import plp.crypto.SmartCardCert;
+import plp.lib.SmartCardCertStore;
+import plp.lib.SmartCardTokenStore;
+import plp.lib.SmartCardUserStore;
 import plp.service.JwtService;
 import plp.service.RestX;
 
 import java.security.PublicKey;
 import java.util.*;
+import java.util.HexFormat;
 
 public class PLPHandler
 {
@@ -115,50 +120,48 @@ public class PLPHandler
 
   private PLPResponse smartCard(Context ctx, PLPRequest req) throws Exception
   {
-    if (!req.has(PLPRequest.DEV_ID) || !req.has(PLPRequest.QRC) || !req.has(PLPRequest.OS)
-      || !req.has(PLPRequest.TLS) || !req.has(PLPRequest.PORT))
+    if (!req.has(PLPRequest.DEV_ID) || !req.has(PLPRequest.QRC) || !req.has(PLPRequest.TOKEN))
     {
-      Log.d("clientCert: error exit 1");
+      Log.d("smartCard: missing required fields");
       return PLPResponse.invalid();
     }
 
     String ccrt = "0";
     if (!verifyPairingData(req.get(PLPRequest.DEV_ID), req.get(PLPRequest.QRC)))
     {
-      Log.d("clientCert: error exit 2");
+      Log.d("smartCard: pairing invalid");
       return PLPResponse.invalid(ccrt);
     }
 
-    String os = req.get(PLPRequest.OS);
-    if (os.equals("win") || os.equals("android"))
+    // the enrollment token (QR code from the admin UI) points to one issued certificate
+    String token   = req.get(PLPRequest.TOKEN).trim();
+    SmartCardTokenStore.Entry entry = SmartCardTokenStore.getInstance().resolve(token);
+    if (entry == null)
     {
-      byte[] publicKeyPem = Base64.getDecoder().decode(req.get(PLPRequest.PUBPEMB64));
-      IClientCertIssuer.CertResult cert = certIssuer.issueFromPublicKey(publicKeyPem, req.get(PLPRequest.PORT), req.get(PLPRequest.DEFAULT_MODE));
-      if (cert != null && !cert.certB64().isEmpty())
-      {
-        return new PLPResponse()
-          .set("serialnr", cert.serialNr())
-          .set("certb64", cert.certB64())
-          .set("valid", "1")
-          .set("ccrt", ccrt);
-      }
-    }
-    else if (os.equals("apple"))
-    {
-      String pwd = newPassword();
-      String pkcs12Hex = certIssuer.issuePkcs12(pwd, req.get(PLPRequest.PORT), req.get(PLPRequest.DEFAULT_MODE));
-      if (pkcs12Hex != null && !pkcs12Hex.isEmpty())
-      {
-        return new PLPResponse()
-          .set("crt", pkcs12Hex)
-          .set("pwd", pwd)
-          .set("valid", "1")
-          .set("ccrt", ccrt);
-      }
+      Log.d("smartCard: token unknown or expired");
+      return PLPResponse.invalid(ccrt);
     }
 
-    Log.d("clientCert: error exit 3");
-    return PLPResponse.invalid();
+    SmartCardCertStore certs = SmartCardCertStore.getInstance();
+    SmartCardCertStore.Cert  meta = certs.findBySerial(entry.serialHex());
+    SmartCardCertStore.KeyCert kc = certs.getKeyCert(entry.serialHex());
+    if (meta == null || kc == null || !SmartCardCertStore.ACTIVE.equals(meta.status()))
+    {
+      Log.d("smartCard: certificate not available (revoked or no stored key)");
+      return PLPResponse.invalid(ccrt);
+    }
+
+    // fresh password per request, travels in the response like for the other certificate calls
+    String pwd = newPassword();
+    byte[] p12 = SmartCardCert.load().buildPkcs12(kc.keyPem(), kc.certPem(), pwd);
+
+    Log.i("[smartCard] Delivered cert for " + meta.upn());
+    return new PLPResponse()
+      .set("crt",   HexFormat.of().formatHex(p12))
+      .set("pwd",   pwd)
+      .set("upn",   meta.upn())
+      .set("valid", "1")
+      .set("ccrt",  ccrt);
   }
 
   private PLPResponse clientCert(Context ctx, PLPRequest req) throws Exception

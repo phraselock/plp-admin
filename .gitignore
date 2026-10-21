@@ -12,4 +12,5 @@ build/
 /psono.properties
 /smartcard.properties
 /certs/CA/
+/certs/mqtt/
 .DS_Store

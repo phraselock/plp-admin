@@ -27,6 +27,8 @@ public class PLPRequest
   public static final String PUBPEMB64    = "pubpemb64";
   public static final String OID_EXT      = "oidExt";
   public static final String AS_XML       = "asXML";
+  public static final String USERNAME     = "username";
+  public static final String TOKEN        = "token";
 
   // ── Internal ──────────────────────────────────────────────────────────────
 

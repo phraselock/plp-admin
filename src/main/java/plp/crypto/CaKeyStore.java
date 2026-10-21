@@ -25,6 +25,13 @@ public record CaKeyStore(X509Certificate certificate, PrivateKey privateKey)
     return new CaKeyStore(cert, key);
   }
 
+  public static CaKeyStore load(java.nio.file.Path certPath, java.nio.file.Path keyPath) throws IOException, CertificateException
+  {
+    X509Certificate cert = readCertificate(certPath.toString());
+    PrivateKey key = readPrivateKey(keyPath.toString());
+    return new CaKeyStore(cert, key);
+  }
+
   private static X509Certificate readCertificate(String path) throws IOException, CertificateException
   {
     try (PEMParser parser = new PEMParser(new FileReader(path)))
@@ -42,6 +49,10 @@ public record CaKeyStore(X509Certificate certificate, PrivateKey privateKey)
       if (obj instanceof PEMKeyPair pemKeyPair)
       {
         return new JcaPEMKeyConverter().setProvider("BC").getKeyPair(pemKeyPair).getPrivate();
+      }
+      if (obj instanceof org.bouncycastle.asn1.pkcs.PrivateKeyInfo pkInfo)
+      {
+        return new JcaPEMKeyConverter().setProvider("BC").getPrivateKey(pkInfo);
       }
       throw new IOException("Unsupported CA key format: " + path);
     }

@@ -238,9 +238,21 @@ public class ConfigHandler
   {
     List<String> w = new ArrayList<>();
 
-    String caDir = p.getProperty("ca.directory", "").trim();
-    if (caDir.isBlank())
-      w.add("ca.directory: not configured");
+    String caCert = p.getProperty("ca.cert", "").trim();
+    if (caCert.isBlank())
+      w.add("ca.cert: CA certificate path not configured");
+
+    String domain = p.getProperty("card.domain", "").trim();
+    if (domain.isBlank())
+      w.add("card.domain: default domain not set — UPN pre-fill will be empty");
+
+    String certType = p.getProperty("card.cert.type", "").trim().toLowerCase();
+    if (!certType.equals("rsa") && !certType.equals("ecc"))
+      w.add("card.cert.type: expected 'rsa' or 'ecc', got: \"" + certType + "\"");
+
+    String bits = p.getProperty("card.cert.bits", "").trim();
+    if (!bits.matches("\\d+"))
+      w.add("card.cert.bits: must be a number (e.g. 256 for ECC, 2048 for RSA)");
 
     return w;
   }

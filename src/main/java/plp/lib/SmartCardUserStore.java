@@ -24,7 +24,7 @@ public class SmartCardUserStore
     return instance;
   }
 
-  public record User(int id, String name, String username, String email, String updatedAt) {}
+  public record User(int id, String name, String username, String email, String domain, String updatedAt) {}
 
   private SmartCardUserStore()
   {
@@ -45,34 +45,40 @@ public class SmartCardUserStore
           name       TEXT NOT NULL,
           username   TEXT NOT NULL UNIQUE,
           email      TEXT NOT NULL,
+          domain     TEXT NOT NULL DEFAULT '',
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )
       """);
+      // migrate: add domain column if missing (existing databases)
+      try { stmt.execute("ALTER TABLE smartcard_users ADD COLUMN domain TEXT NOT NULL DEFAULT ''"); }
+      catch (SQLException ignored) {}
     }
     catch (Exception e) { Log.e("[SmartCardUserStore] initTable: " + e.getMessage()); }
   }
 
   /** Inserts or updates a user by username. Returns the row id, or -1 on error. */
-  public int upsert(String name, String username, String email)
+  public int upsert(String name, String username, String email, String domain)
   {
     String now = LocalDateTime.now().format(FMT);
     try (Connection conn = DriverManager.getConnection(dbUrl))
     {
       try (PreparedStatement ps = conn.prepareStatement("""
-        INSERT INTO smartcard_users (name, username, email, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO smartcard_users (name, username, email, domain, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(username) DO UPDATE SET
           name       = excluded.name,
           email      = excluded.email,
+          domain     = excluded.domain,
           updated_at = excluded.updated_at
       """))
       {
         ps.setString(1, name);
         ps.setString(2, username);
         ps.setString(3, email);
-        ps.setString(4, now);
+        ps.setString(4, domain);
         ps.setString(5, now);
+        ps.setString(6, now);
         ps.executeUpdate();
       }
       try (PreparedStatement q = conn.prepareStatement(
@@ -94,14 +100,14 @@ public class SmartCardUserStore
     List<User> list = new ArrayList<>();
     try (Connection conn = DriverManager.getConnection(dbUrl);
          PreparedStatement ps = conn.prepareStatement(
-           "SELECT id, name, username, email, updated_at FROM smartcard_users ORDER BY name"))
+           "SELECT id, name, username, email, domain, updated_at FROM smartcard_users ORDER BY name"))
     {
       try (ResultSet rs = ps.executeQuery())
       {
         while (rs.next())
           list.add(new User(rs.getInt("id"), rs.getString("name"),
                             rs.getString("username"), rs.getString("email"),
-                            rs.getString("updated_at")));
+                            rs.getString("domain"), rs.getString("updated_at")));
       }
     }
     catch (Exception e) { Log.e("[SmartCardUserStore] findAll: " + e.getMessage()); }
@@ -112,7 +118,7 @@ public class SmartCardUserStore
   {
     try (Connection conn = DriverManager.getConnection(dbUrl);
          PreparedStatement ps = conn.prepareStatement(
-           "SELECT id, name, username, email, updated_at FROM smartcard_users WHERE id = ?"))
+           "SELECT id, name, username, email, domain, updated_at FROM smartcard_users WHERE id = ?"))
     {
       ps.setInt(1, id);
       try (ResultSet rs = ps.executeQuery())
@@ -120,10 +126,29 @@ public class SmartCardUserStore
         if (rs.next())
           return new User(rs.getInt("id"), rs.getString("name"),
                           rs.getString("username"), rs.getString("email"),
-                          rs.getString("updated_at"));
+                          rs.getString("domain"), rs.getString("updated_at"));
       }
     }
     catch (Exception e) { Log.e("[SmartCardUserStore] findById: " + e.getMessage()); }
+    return null;
+  }
+
+  public User findByUsername(String username)
+  {
+    try (Connection conn = DriverManager.getConnection(dbUrl);
+         PreparedStatement ps = conn.prepareStatement(
+           "SELECT id, name, username, email, domain, updated_at FROM smartcard_users WHERE username = ?"))
+    {
+      ps.setString(1, username);
+      try (ResultSet rs = ps.executeQuery())
+      {
+        if (rs.next())
+          return new User(rs.getInt("id"), rs.getString("name"),
+                          rs.getString("username"), rs.getString("email"),
+                          rs.getString("domain"), rs.getString("updated_at"));
+      }
+    }
+    catch (Exception e) { Log.e("[SmartCardUserStore] findByUsername: " + e.getMessage()); }
     return null;
   }
 
