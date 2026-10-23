@@ -7,6 +7,42 @@ Combined API + admin UI service (replaces plp-backend and plp-custom). One proce
 
 ---
 
+## Before you install: the questions and how to answer them
+
+The installer (see [Installation](#installation-debian--raspberry-pi-os) below) asks a handful of questions in a
+text dialog. **Most of them you answer with Enter**: the default is right for a normal PhraseLock-Bridge server.
+You can run the installer again at any time, your previous answers are offered as defaults and nothing is deleted.
+
+**Have ready:**
+- the MQTT user name and password of your broker (on a PhraseLock-Bridge server they are in
+  `/opt/phraselock/credentials.txt`),
+- the master password of your KeePass file, if you use one of your own,
+- optionally a plp-core JWT (it can wait, see below).
+
+| Question | What it is | Your answer |
+|---|---|---|
+| Stop and disable plp-custom / plp-backend? | Only if the old services are still running. They must not run together with plp-admin. | **Yes.** Nothing is deleted. |
+| HTTP port | Where plp-admin listens, behind nginx. | **Enter** (7070). |
+| Allowed IPs | Who may call the service directly. | **Enter** (127.0.0.1, because nginx runs on the same host). Add the proxy's IP only if nginx runs elsewhere. |
+| Jetty max threads | Size of the thread pool. | **Enter** (10). |
+| Enable KeePass integration? | Serves credentials from a KeePass file. | **Yes** if you use KeePass, otherwise No. |
+| Use Redis as peer config store? | Where per-peer settings are kept. | **No** (SQLite). Yes only if you run your own Redis. |
+| plp-core JWT | The license token of your installation. | **Paste it, or leave it empty.** Empty is fine for now: the certificate API refuses requests until you set `pl.core.jwt` later (see below). |
+| MQTT broker URL | Your mosquitto. | **Enter** (`ssl://localhost:8883`), or the address of your broker. |
+| MQTT user name / password | Login at the broker. | **The values from your broker** (see "Have ready"). |
+| mTLS client key / certificate | The service's own client certificate for the broker. | **Enter.** The defaults point to the PhraseLock-Bridge PKI. |
+| Path to the .kdbx file | Your KeePass database. | **Enter** for the demo database that the installer downloads, or the path of your own file. |
+| KeePass master password | Opens that file. | The password of your file. For the demo database a hint with the demo password appears: **change it** afterwards (KeePassXC → Change Master Password, then `keepass.properties`). |
+| Service UUID | Identifies your server in the QR codes of the mobile app. | **Enter** (a random one is suggested, keep it). |
+
+**At the end** the installer shows the **admin token** once. Write it down; it is also in
+`/opt/phraselock/admin/admin-setup.txt` (root only). You need it for the admin UI.
+
+**Without a JWT:** request one from PhraseLock, enter it as `pl.core.jwt` in
+`/opt/phraselock/admin/application.properties` and run `systemctl restart plp-admin`, or run the installer again.
+
+---
+
 ## Installation (Debian / Raspberry Pi OS)
 
 ```sh
