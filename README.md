@@ -35,6 +35,10 @@ Run it again to update: existing settings are offered as defaults, the admin tok
 - **Ownership:** files you copy into `/opt/phraselock/admin` as root must be given to the service user again
   (`chown phraselock:phraselock`), otherwise the service stops with an `AccessDeniedException`.
 - The SmartCard CA (`certs/CA/smartcard`) is not set up by the installer.
+- **Called by PhraseLock-Bridge:** the PLPServer installer runs this installer (from the latest release tag) and
+  pre-fills the MQTT URL, user and password through the environment variables `PLP_ADMIN_MQTT_URL`,
+  `PLP_ADMIN_MQTT_USER` and `PLP_ADMIN_MQTT_PASS`. The dialogs still appear with these values filled in; an
+  existing configuration always wins.
 
 ---
 

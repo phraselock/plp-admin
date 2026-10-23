@@ -6,6 +6,11 @@
 # Usage:
 #   curl -sSL https://raw.githubusercontent.com/phraselock/plp-admin/main/install.sh | bash
 #
+# Called by the PhraseLock-Bridge installer (PLPServer), which pre-fills these defaults
+# through environment variables. The dialogs still appear, with those values filled in;
+# an existing configuration always wins over them:
+#   PLP_ADMIN_MQTT_URL   PLP_ADMIN_MQTT_USER   PLP_ADMIN_MQTT_PASS
+#
 set -euo pipefail
 
 # Root is checked here rather than assumed via a hardcoded "sudo" in the
@@ -162,9 +167,9 @@ E_CORE_URL=""
 E_CORE_PUB_X=""
 E_CORE_PUB_Y=""
 
-E_MQTT_URL="ssl://localhost:8883"
-E_MQTT_USER="plpadmin"
-E_MQTT_PASS=""
+E_MQTT_URL="${PLP_ADMIN_MQTT_URL:-ssl://localhost:8883}"
+E_MQTT_USER="${PLP_ADMIN_MQTT_USER:-plpadmin}"
+E_MQTT_PASS="${PLP_ADMIN_MQTT_PASS:-}"
 E_MQTT_KEY="${INSTALL_DIR}/certs/mqtt_8883.pkcs8.key"
 E_MQTT_CERT="${INSTALL_DIR}/certs/mqtt_8883.crt"
 
