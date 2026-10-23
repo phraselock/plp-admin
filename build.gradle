@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'plp'
-version = '1.0.1'
+version = '1.0.2'
 
 repositories {
     mavenCentral()
@@ -66,7 +66,7 @@ dependencies {
 
 shadowJar {
     archiveBaseName.set('plp-admin')
-    archiveVersion.set('1.0.1')
+    archiveVersion.set('1.0.2')
     archiveClassifier.set('')
     mergeServiceFiles()
 }
