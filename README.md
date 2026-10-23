@@ -7,6 +7,37 @@ Combined API + admin UI service (replaces plp-backend and plp-custom). One proce
 
 ---
 
+## Installation (Debian / Raspberry Pi OS)
+
+```sh
+curl -sSL https://raw.githubusercontent.com/phraselock/plp-admin/main/install.sh | bash
+```
+
+Needs root (or sudo). The installer downloads the JAR of the latest GitHub release, asks for the settings with
+`whiptail` (port, allowed IPs, KeePass, peer store, plp-core JWT, MQTT) and installs a systemd service.
+Run it again to update: existing settings are offered as defaults, the admin token and the ECC key pair are kept.
+`uninstall.sh` (download it by hand, there is deliberately no one-liner) removes service and files.
+
+| What | Where |
+|---|---|
+| JAR, config, databases, certs | `/opt/phraselock/admin` (owner `phraselock`; the service writes the SQLite databases and the CRL there) |
+| Service | `plp-admin` (user `phraselock`), log `/var/log/plp-admin.log` |
+| nginx | `/etc/nginx/phraselock.d/plp-admin.conf` (`/admin/` to the plp-admin port, client certificate required) |
+| CA keys for issuing client certificates | symlinks in `certs/CA/service` to `/opt/phraselock/pki-scripts` (PhraseLock-Bridge) |
+| Summary of the installation | `/opt/phraselock/admin/admin-setup.txt` (root only) |
+
+- **Replaces plp-backend and plp-custom.** They must not run at the same time (plp-custom uses the same port). If the
+  installer finds them running or enabled it offers to stop and disable them (`systemctl stop` / `disable`).
+  Nothing is deleted. An old nginx include `plp-backend.conf` becomes `plp-admin.conf`: the old file is
+  renamed to `plp-backend.orig_con_f` (kept, not included by nginx) and the installer writes the new one.
+- **plp-core JWT** is optional in the dialog. Without one the certificate API refuses requests until
+  `pl.core.jwt` is set in `application.properties` (restart the service afterwards).
+- **Ownership:** files you copy into `/opt/phraselock/admin` as root must be given to the service user again
+  (`chown phraselock:phraselock`), otherwise the service stops with an `AccessDeniedException`.
+- The SmartCard CA (`certs/CA/smartcard`) is not set up by the installer.
+
+---
+
 ## SmartCard logon: how the pieces fit together
 
 Smartcard logon to Windows uses Kerberos with certificates (PKINIT) instead of a password.
@@ -97,7 +128,7 @@ revoked card.
 1. **Issue new certificate…** (confirmation popup) creates key + certificate and stores both as PEM in
    `smartcard-users.db`. Nothing else happens.
 2. **QR code** (per certificate row, QR valid for N minutes) creates an enrollment token for exactly that
-   certificate and shows the JSON `{"smartcard":{"token":"…","upn":"…"}}` plus the QR code. Only one token
+   certificate and shows the JSON `{"smartcard":{"token":"…","upn":"…","guid":"…"}}` (the guid is created when the certificate is issued and stored with it) plus the QR code. Only one token
    per user exists: a new one replaces the older. A token is never consumed, it only expires.
 3. The phone calls `POST /api/mqtt/v1/validate/smartcard` with `devId`, `qrc` (pairing check against plp-core)
    and `token`. The answer carries `crt` (hex PKCS#12), `pwd` (fresh random password), `upn`, `valid`, `ccrt`.

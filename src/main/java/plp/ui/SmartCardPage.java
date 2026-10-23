@@ -177,6 +177,7 @@ public class SmartCardPage
           table().withStyle("width:100%;border-collapse:collapse;font-size:13px;").with(
             thead(tr().withStyle("background:#f0f0f0;text-align:left;position:sticky;top:0;z-index:1;").with(
               th("Serial").withStyle("padding:8px 10px;"),
+              th("GUID").withStyle("padding:8px 10px;"),
               th("Issued").withStyle("padding:8px 10px;"),
               th("Valid until").withStyle("padding:8px 10px;"),
               th("Status").withStyle("padding:8px 10px;"),
@@ -189,6 +190,7 @@ public class SmartCardPage
                 td(c.serialHex().substring(0, Math.min(12, c.serialHex().length())) + "…")
                   .withTitle(c.serialHex())
                   .withStyle("padding:8px 10px;font-family:monospace;font-size:12px;"),
+                td(c.guid() != null ? c.guid() : "–").withStyle("padding:8px 10px;font-family:monospace;font-size:12px;color:#555;"),
                 td(c.issuedAt()).withStyle("padding:8px 10px;color:#555;"),
                 td(c.notAfter()).withStyle("padding:8px 10px;color:#555;"),
                 td(revoked ? "revoked " + c.revokedAt() : "active")

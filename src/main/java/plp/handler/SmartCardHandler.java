@@ -96,6 +96,7 @@ public class SmartCardHandler
         JSONObject sc = new JSONObject();
         sc.put("token", token);
         sc.put("upn",   cert.upn());
+        if (cert.guid() != null) sc.put("guid", cert.guid());
         JSONObject root = new JSONObject();
         root.put("smartcard", sc);
 

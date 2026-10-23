@@ -6,6 +6,10 @@ import plp.handler.MqttService;
 import plp.processor.BESKeePass;
 import plp.processor.BESPsono;
 
+/*
+  ./gradlew shadowJar
+ */
+
 public class Main
 {
   public static void main(String[] args) throws Exception

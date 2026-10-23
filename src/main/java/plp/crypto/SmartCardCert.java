@@ -54,7 +54,7 @@ public class SmartCardCert
 
   static { Security.addProvider(new BouncyCastleProvider()); }
 
-  public record Result(String serialHex) {}
+  public record Result(String serialHex, String guid) {}
 
   private final Path   caCertPath;
   private final Path   caKeyPath;
@@ -112,11 +112,12 @@ public class SmartCardCert
     KeyPair    kp = generateKeyPair();
 
     String         serialHex = randomSerialHex();
+    String         guid      = java.util.UUID.randomUUID().toString();
     X509Certificate cert     = signCertificate(ca, new X500Name("CN=" + commonName), kp.getPublic(), serialHex, upn);
 
     SmartCardCertStore.getInstance().add(serialHex, username, upn, cert.getNotAfter(),
-      toPem(new JcaPKCS8Generator(kp.getPrivate(), null)), toPem(cert));
-    return new Result(serialHex);
+      toPem(new JcaPKCS8Generator(kp.getPrivate(), null)), toPem(cert), guid);
+    return new Result(serialHex, guid);
   }
 
   /** Builds a PKCS#12 (key, certificate, CA certificate) from the stored PEMs. */
