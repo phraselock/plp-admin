@@ -120,7 +120,7 @@ public class MqttService implements MqttCallback
     config = loadConfig();
 
     brokerUrl          = required(config, "broker.url");
-    String clientId    = config.getProperty("client.id", "plp-backend-" + UUID.randomUUID());
+    String clientId    = config.getProperty("client.id", "plp-admin-" + UUID.randomUUID());
     int keepAlive      = Integer.parseInt(config.getProperty("keepalive.seconds", "60"));
     retryIntervalS     = Integer.parseInt(config.getProperty("connect.retry.seconds", "30"));
 

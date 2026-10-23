@@ -27,7 +27,7 @@ Everything is signed by one CA, the **"PLC Test CA"**.
 
 | Item | Location | Created by | Used by |
 |---|---|---|---|
-| CA cert + key (plp-admin) | `certs/CA/smartcard/ca.crt`, `ca.key` | `scripts/smartcard/ca-create.sh` (plp-backend) | plp-admin signs card certificates |
+| CA cert + key (plp-admin) | `certs/CA/smartcard/ca.crt`, `ca.key` | `scripts/smartcard/ca-create.sh` (in this repo) | plp-admin signs card certificates |
 | CA cert + key (lab DC) | hmx2: `/root/plc-ca/ca.crt`, `ca.key` | same scripts | signs the KDC certificate; the **same CA** (identical SHA-256 fingerprint) |
 | KDC cert + key | hmx2: `/var/lib/samba/private/pkinit/kdc.pem`, `kdc.key` | `ca-issue-kdc.sh` (lab only) | Samba KDC (`/etc/krb5.conf`, `[kdc] pkinit_identity`) |
 | KDC trust anchor | hmx2: `/var/lib/samba/private/pkinit/anchors.pem` | copy of `ca.crt` | Samba KDC (`pkinit_anchors`) |
