@@ -78,7 +78,7 @@ before the key was stored show "–". Revoked is revoked: no QR code, no P12, an
 - `card.crl.file` – where the CRL is written (DER; a PEM copy gets the extra suffix `.pem`)
 - `card.crl.url` – optional CRL distribution point written into new card certificates. The Samba KDC does not
   use it (it reads the local file), and Windows only checks the KDC certificate here, so it can stay empty in
-  the lab. Set it (lab: `http://hmx2.ad.phraselock.test/plc-test-ca.crl`) when cards are also validated by
+  the lab. Set it (e.g. `http://dc.ad.example.test/plc-test-ca.crl`) when cards are also validated by
   something else, e.g. a real Windows DC. Certificates issued before it was set do not have it.
 - `card.token.ttl.minutes` – default validity of a QR token (can be overridden per QR code in the UI)
 

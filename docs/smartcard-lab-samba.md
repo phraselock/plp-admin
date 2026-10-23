@@ -1,9 +1,13 @@
-# SmartCard logon with a Samba lab DC (hmx2)
+# SmartCard logon with a Samba lab DC
 
 **Lab and demo material, not part of the product.** The product is the Windows installation (driver, service,
 installer) and the smartphones; domain, CA and domain controller come from the customer (usually Windows Server AD
-with a Microsoft CA). This document describes the Samba domain controller on the lab machine hmx2 that is used to
+with a Microsoft CA). This document describes a Samba domain controller (the "DC" below) that is used in the lab to
 test the whole chain, and how CA, KDC certificate, anchors and CRL fit together there.
+
+> **Example values.** Host names and domains in this document are placeholders: the DC is `dc.ad.example.test`
+> (domain `ad.example.test`); replace them with your own. In our lab the DC is hmx2. "PLC" in names such as
+> "PLC Test CA" or `plc-test-ca.crl` stands for PhraseLock Card.
 
 The plp-admin side (issuing and revoking cards, configuration) is described in the [README](../README.md).
 
@@ -28,11 +32,11 @@ Everything is signed by one CA, the **"PLC Test CA"**.
 | Item | Location | Created by | Used by |
 |---|---|---|---|
 | CA cert + key (plp-admin) | `certs/CA/smartcard/ca.crt`, `ca.key` | `scripts/smartcard/ca-create.sh` (in this repo) | plp-admin signs card certificates |
-| CA cert + key (lab DC) | hmx2: `/root/plc-ca/ca.crt`, `ca.key` | same scripts | signs the KDC certificate; the **same CA** (identical SHA-256 fingerprint) |
-| KDC cert + key | hmx2: `/var/lib/samba/private/pkinit/kdc.pem`, `kdc.key` | `ca-issue-kdc.sh` (lab only) | Samba KDC (`/etc/krb5.conf`, `[kdc] pkinit_identity`) |
-| KDC trust anchor | hmx2: `/var/lib/samba/private/pkinit/anchors.pem` | copy of `ca.crt` | Samba KDC (`pkinit_anchors`) |
-| CRL for Windows (empty) | hmx2: `/var/www/plc-crl/plc-test-ca.crl` (DER) | `ca-create.sh` (`openssl ca -gencrl`), valid until 2036 | nginx serves it at `http://hmx2.ad.phraselock.test/plc-test-ca.crl`; Windows checks the KDC certificate with it |
-| CRL for the KDC (revoked cards) | hmx2: `/var/lib/samba/private/pkinit/plc-test-ca.crl.pem` | plp-admin (`card.crl.file`), copied to hmx2 by hand | Samba KDC (`pkinit_revoke`), checks card certificates |
+| CA cert + key (lab DC) | DC: `/root/plc-ca/ca.crt`, `ca.key` | same scripts | signs the KDC certificate; the **same CA** (identical SHA-256 fingerprint) |
+| KDC cert + key | DC: `/var/lib/samba/private/pkinit/kdc.pem`, `kdc.key` | `ca-issue-kdc.sh` (lab only) | Samba KDC (`/etc/krb5.conf`, `[kdc] pkinit_identity`) |
+| KDC trust anchor | DC: `/var/lib/samba/private/pkinit/anchors.pem` | copy of `ca.crt` | Samba KDC (`pkinit_anchors`) |
+| CRL for Windows (empty) | DC: `/var/www/plc-crl/plc-test-ca.crl` (DER) | `ca-create.sh` (`openssl ca -gencrl`), valid until 2036 | nginx serves it at `http://dc.ad.example.test/plc-test-ca.crl`; Windows checks the KDC certificate with it |
+| CRL for the KDC (revoked cards) | DC: `/var/lib/samba/private/pkinit/plc-test-ca.crl.pem` | plp-admin (`card.crl.file`), copied to the DC by hand | Samba KDC (`pkinit_revoke`), checks card certificates |
 | Card certificate + key | `smartcard-users.db`, table `smartcard_certs` (`key_pem`, `cert_pem`) | plp-admin (`SmartCardCert`) | the phone; the PKCS#12 is built per API request with a fresh random password |
 | CA in Windows | Root + NTAuth store on the client | manually / GPO | Windows validates chain |
 
@@ -51,7 +55,7 @@ The pkinit directory contains exactly four files: `anchors.pem`, `kdc.pem`, `kdc
 So the CRL must be: reachable over HTTP from the Windows client, signed by the CA, and not expired.
 Samba AD itself does not need it; only smartcard logon does.
 
-### How the Samba DC (hmx2) is configured
+### How the Samba DC is configured
 
 Samba is started by `samba-ad-dc.service` (`/usr/sbin/samba --foreground`) and reads, in this order of relevance:
 
@@ -92,14 +96,14 @@ revoked card.
 
 ### Revoking: getting the CRL to the KDC
 
-plp-admin writes the CRL files itself (`card.crl.file`, see the README) but does not copy them anywhere. On hmx2 copy
+plp-admin writes the CRL files itself (`card.crl.file`, see the README) but does not copy them anywhere. On the DC copy
 the PEM by hand to the file `pkinit_revoke` points at:
 
 ```sh
-scp certs/CA/smartcard/crl/plc-test-ca.crl.pem hmx2:/var/lib/samba/private/pkinit/plc-test-ca.crl.pem
+scp certs/CA/smartcard/crl/plc-test-ca.crl.pem dc.ad.example.test:/var/lib/samba/private/pkinit/plc-test-ca.crl.pem
 ```
 
-The KDC re-reads the file on every logon, no restart. When plp-admin runs on hmx2 itself, point `card.crl.file` at
+The KDC re-reads the file on every logon, no restart. When plp-admin runs on the DC itself, point `card.crl.file` at
 that location instead.
 
 ### Checking it yourself
@@ -118,7 +122,7 @@ openssl crl -in plc-test-ca.crl.pem -CAfile ca.crt -noout   # signature check
 
 # is the Windows CRL valid and served?
 openssl crl -inform DER -in plc-test-ca.crl -noout -issuer -lastupdate -nextupdate
-curl -sI http://hmx2.ad.phraselock.test/plc-test-ca.crl
+curl -sI http://dc.ad.example.test/plc-test-ca.crl
 
 # Windows: fetch and validate a certificate including CRL
 certutil -verify -urlfetch pluser1.cer
