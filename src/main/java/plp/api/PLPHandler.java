@@ -120,7 +120,8 @@ public class PLPHandler
 
   private PLPResponse smartCard(Context ctx, PLPRequest req) throws Exception
   {
-    if (!req.has(PLPRequest.DEV_ID) || !req.has(PLPRequest.QRC) || !req.has(PLPRequest.TOKEN))
+
+    if (!req.has(PLPRequest.DEV_ID) || !req.has(PLPRequest.QRC) )
     {
       Log.d("smartCard: missing required fields");
       return PLPResponse.invalid();
