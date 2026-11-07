@@ -22,7 +22,8 @@ public class SmartCardCertStore
   public static final String REVOKED = "revoked";
 
   public record Cert(String serialHex, String username, String upn, String issuedAt,
-                     String notAfter, String status, String revokedAt, boolean deliverable, String guid) {}
+                     String notAfter, String status, String revokedAt, boolean deliverable, String guid,
+                     String keyInfo) {}
 
   /** Private key (PKCS#8 PEM) and certificate (PEM) kept for building the PKCS#12. */
   public record KeyCert(String keyPem, String certPem) {}
@@ -113,6 +114,23 @@ public class SmartCardCertStore
     catch (Exception e) { Log.e("[SmartCardCertStore] setRevoked: " + e.getMessage()); }
   }
 
+  /**
+   * Deletes a revoked certificate (row, key and certificate). Only rows with status 'revoked' are deleted. The CRL is derived from
+   * these rows, so its entry for the serial disappears with the row: the caller rewrites the CRL afterwards.
+   * Returns true if a row was deleted.
+   */
+  public boolean deleteRevoked(String serialHex)
+  {
+    try (Connection conn = DriverManager.getConnection(dbUrl);
+         PreparedStatement ps = conn.prepareStatement(
+           "DELETE FROM smartcard_certs WHERE serial_hex = ? AND status = 'revoked'"))
+    {
+      ps.setString(1, serialHex);
+      return ps.executeUpdate() > 0;
+    }
+    catch (Exception e) { Log.e("[SmartCardCertStore] deleteRevoked: " + e.getMessage()); return false; }
+  }
+
   public Cert findBySerial(String serialHex)
   {
     List<Cert> l = query("WHERE serial_hex = ?", serialHex);
@@ -136,19 +154,37 @@ public class SmartCardCertStore
     return null;
   }
 
+  /** Key type and length of the certificate's public key for the admin list, for example "RSA 3072" or "EC 256"; "–" if unknown. */
+  private static String keyInfo(String certPem)
+  {
+    if (certPem == null || certPem.isBlank()) return "–";
+    try
+    {
+      java.security.cert.X509Certificate x = (java.security.cert.X509Certificate)
+        java.security.cert.CertificateFactory.getInstance("X.509")
+          .generateCertificate(new java.io.ByteArrayInputStream(certPem.getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+      java.security.PublicKey k = x.getPublicKey();
+      if (k instanceof java.security.interfaces.RSAPublicKey r) return "RSA " + r.getModulus().bitLength();
+      if (k instanceof java.security.interfaces.ECPublicKey e) return "EC " + e.getParams().getCurve().getField().getFieldSize();
+      return k.getAlgorithm();
+    }
+    catch (Exception e) { return "–"; }
+  }
+
   private List<Cert> query(String where, String arg)
   {
     List<Cert> list = new ArrayList<>();
     try (Connection conn = DriverManager.getConnection(dbUrl);
          PreparedStatement ps = conn.prepareStatement(
-           "SELECT serial_hex, username, upn, issued_at, not_after, status, revoked_at, key_pem IS NOT NULL, guid FROM smartcard_certs " + where))
+           "SELECT serial_hex, username, upn, issued_at, not_after, status, revoked_at, key_pem IS NOT NULL, guid, cert_pem FROM smartcard_certs " + where))
     {
       if (arg != null) ps.setString(1, arg);
       try (ResultSet rs = ps.executeQuery())
       {
         while (rs.next())
           list.add(new Cert(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                            rs.getString(5), rs.getString(6), rs.getString(7), rs.getInt(8) == 1, rs.getString(9)));
+                            rs.getString(5), rs.getString(6), rs.getString(7), rs.getInt(8) == 1, rs.getString(9),
+                            keyInfo(rs.getString(10))));
       }
     }
     catch (Exception e) { Log.e("[SmartCardCertStore] query: " + e.getMessage()); }

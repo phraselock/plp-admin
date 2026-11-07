@@ -180,6 +180,7 @@ public class SmartCardPage
               th("GUID").withStyle("padding:8px 10px;"),
               th("Issued").withStyle("padding:8px 10px;"),
               th("Valid until").withStyle("padding:8px 10px;"),
+              th("Key").withStyle("padding:8px 10px;"),
               th("Status").withStyle("padding:8px 10px;"),
               th("").withStyle("padding:8px 10px;"),
               th("").withStyle("padding:8px 10px;"))),
@@ -193,6 +194,7 @@ public class SmartCardPage
                 td(c.guid() != null ? c.guid() : "–").withStyle("padding:8px 10px;font-family:monospace;font-size:12px;color:#555;"),
                 td(c.issuedAt()).withStyle("padding:8px 10px;color:#555;"),
                 td(c.notAfter()).withStyle("padding:8px 10px;color:#555;"),
+                td(c.keyInfo()).withStyle("padding:8px 10px;color:#555;white-space:nowrap;"),
                 td(revoked ? "revoked " + c.revokedAt() : "active")
                   .withStyle("padding:8px 10px;color:" + (revoked ? "#cc0000" : "#2a7a2a") + ";"),
                 td().withStyle("padding:8px 10px;").with(
@@ -212,7 +214,16 @@ public class SmartCardPage
                       input().withType("hidden").withName("serial").withValue(c.serialHex()),
                       input().withType("hidden").withName("user").withValue(String.valueOf(user.id())),
                       button(revoked ? "Reinstate" : "Revoke").withType("submit")
-                        .withStyle("font-size:12px;cursor:pointer;")))
+                        .withStyle("font-size:12px;cursor:pointer;")),
+                  revoked
+                    ? form().withMethod("post").withAction("/admin/smartcard-user/cert/delete")
+                        .withStyle("display:inline;margin-left:6px;").with(
+                          input().withType("hidden").withName("serial").withValue(c.serialHex()),
+                          input().withType("hidden").withName("user").withValue(String.valueOf(user.id())),
+                          button("Delete").withType("submit")
+                            .attr("onclick", "return confirm('Delete this revoked certificate? Its entry also disappears from the CRL.')")
+                            .withStyle("font-size:12px;cursor:pointer;color:#fff;background:#cc0000;border:1px solid #cc0000;border-radius:4px;padding:2px 8px;"))
+                    : span())
               );
             }))
           )),

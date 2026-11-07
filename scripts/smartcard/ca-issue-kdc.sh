@@ -6,12 +6,9 @@
 # in the Samba-based lab environment.
 #
 # Usage:
-#   . ./pki.conf && ./ca-issue-kdc.sh
-#   ./ca-issue-kdc.sh <ca-dir>   (with PLC_* environment variables set)
+#   ./ca-issue-kdc.sh pki.conf
 #
-# When sourced from pki.conf the variables DC_FQDN, REALM, DOMAIN, CRL_URL
-# and CA_DIR are used directly. In the explicit form set PLC_DC_FQDN, PLC_REALM,
-# PLC_DOMAIN, PLC_CRL_URL in the environment.
+# Reads from the config file: CA_DIR, CA_CRT, CA_KEY (the issuing CA), DC_FQDN, REALM, DOMAIN, CRL_URL.
 #
 # Written into <ca-dir>/issued/:
 #   kdc.pem   certificate
@@ -23,23 +20,24 @@
 #   crlDistributionPoints  URI:<CRL_URL>
 set -e
 
-if [ -n "${CA_DIR}" ] && [ $# -eq 0 ]; then
-  CA="${CA_DIR:?set CA_DIR in pki.conf}"
-  DC_FQDN="${DC_FQDN:?set DC_FQDN in pki.conf}"
-  REALM="${REALM:?set REALM in pki.conf}"
-  DOMAIN="${DOMAIN:?set DOMAIN in pki.conf}"
-  CRL_URL="${CRL_URL:?set CRL_URL in pki.conf}"
-else
-  CA="${1:?usage: ca-issue-kdc.sh <ca-dir>}"
-  DC_FQDN="${PLC_DC_FQDN:-hmx2.ad.phraselock.test}"
-  REALM="${PLC_REALM:-AD.PHRASELOCK.TEST}"
-  DOMAIN="${PLC_DOMAIN:-ad.phraselock.test}"
-  CRL_URL="${PLC_CRL_URL:-http://hmx2.ad.phraselock.test/plc-test-ca.crl}"
-fi
+CONF="${1:?usage: ca-issue-kdc.sh <config file, e.g. pki.conf>}"
+[ -f "$CONF" ] || { echo "config file not found: $CONF" >&2; exit 1; }
+case "$CONF" in /*|./*) ;; *) CONF="./$CONF" ;; esac
+. "$CONF"
+shift
 
-[ -f "$CA/ca.key" ] && [ -f "$CA/ca.cnf" ] || { echo "$CA is not a CA folder made by ca-create.sh" >&2; exit 1; }
+CA="${CA_DIR:?set CA_DIR in $CONF}"
+: "${CA_CRT:?set CA_CRT in $CONF}"
+: "${CA_KEY:?set CA_KEY in $CONF}"
+: "${DC_FQDN:?set DC_FQDN in $CONF}"
+: "${REALM:?set REALM in $CONF}"
+: "${DOMAIN:?set DOMAIN in $CONF}"
+: "${CRL_URL:?set CRL_URL in $CONF}"
+
+[ -f "$CA/ca.cnf" ] || { echo "$CA/ca.cnf missing: not a CA folder" >&2; exit 1; }
 mkdir -p "$CA/issued"
 cd "$CA"
+[ -f "$CA_CRT" ] && [ -f "$CA_KEY" ] || { echo "CA_CRT/CA_KEY not found (relative to $CA): $CA_CRT $CA_KEY" >&2; exit 1; }
 if [ -f issued/kdc.key ]; then
   echo "issued/kdc.key exists: KDC certificate was already issued" >&2
   exit 1
@@ -70,7 +68,7 @@ CNF
 
 openssl genrsa -out issued/kdc.key 2048 2>/dev/null
 openssl req -new -key issued/kdc.key -subj "/CN=$DC_FQDN" -out issued/kdc.csr
-openssl ca -batch -config ca.cnf -cert ca.crt -keyfile ca.key \
+openssl ca -batch -config ca.cnf -cert "$CA_CRT" -keyfile "$CA_KEY" \
   -extfile issued/kdc.ext -in issued/kdc.csr -out issued/kdc.pem -notext >/dev/null 2>&1
 chmod 600 issued/kdc.key
 

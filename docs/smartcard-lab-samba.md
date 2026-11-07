@@ -20,7 +20,7 @@ Everything is signed by one CA, the **"PLC Test CA"**.
 
 | Term | Meaning |
 |---|---|
-| **CA** | Signs all certificates. `ca.crt` is public and gets distributed; `ca.key` is the secret and stays where it is. |
+| **CA** | Signs all certificates. The CA certificate (`root-ca.crt`) is public and gets distributed; the key (`root-ca.key`) is the secret and stays where it is. |
 | **KDC** | Key Distribution Center = the Kerberos part of the domain controller (Samba: process `kdc`, port 88). |
 | **KDC certificate** | The DC's ID. The DC proves with it to the Windows client that it is the real KDC. |
 | **Card certificate** | The user's ID (goes to the phone / virtual smartcard as PKCS#12). Issued by plp-admin. |
@@ -31,16 +31,17 @@ Everything is signed by one CA, the **"PLC Test CA"**.
 
 | Item | Location | Created by | Used by |
 |---|---|---|---|
-| CA cert + key (plp-admin) | `certs/CA/smartcard/ca.crt`, `ca.key` | `scripts/smartcard/ca-create.sh` (in this repo) | plp-admin signs card certificates |
+| CA cert + key (plp-admin) | `certs/CA/smartcard/root-ca.crt`, `root-ca.key` (properties `ca.cert`, `ca.key`) | `scripts/smartcard/ca-create.sh` (in this repo) | plp-admin signs card certificates |
 | CA cert + key (lab DC) | DC: `/root/plc-ca/ca.crt`, `ca.key` | same scripts | signs the KDC certificate; the **same CA** (identical SHA-256 fingerprint) |
 | KDC cert + key | DC: `/var/lib/samba/private/pkinit/kdc.pem`, `kdc.key` | `ca-issue-kdc.sh` (lab only) | Samba KDC (`/etc/krb5.conf`, `[kdc] pkinit_identity`) |
-| KDC trust anchor | DC: `/var/lib/samba/private/pkinit/anchors.pem` | copy of `ca.crt` | Samba KDC (`pkinit_anchors`) |
-| CRL for Windows (empty) | DC: `/var/www/plc-crl/plc-test-ca.crl` (DER) | `ca-create.sh` (`openssl ca -gencrl`), valid until 2036 | nginx serves it at `http://dc.ad.example.test/plc-test-ca.crl`; Windows checks the KDC certificate with it |
-| CRL for the KDC (revoked cards) | DC: `/var/lib/samba/private/pkinit/plc-test-ca.crl.pem` | plp-admin (`card.crl.file`), copied to the DC by hand | Samba KDC (`pkinit_revoke`), checks card certificates |
+| KDC trust anchor | DC: `/var/lib/samba/private/pkinit/anchors.pem` | copy of the root certificate (`root-ca.crt`) | Samba KDC (`pkinit_anchors`) |
+| CRL of the issuing CA | DC: `/var/www/plc-crl/intermediate-ca.crl` (DER) | first the empty one from `ca-create-intermediate.sh`; then plp-admin overwrites it (`card.crl.file`) | nginx serves it at `http://dc.ad.example.test/intermediate-ca.crl`; Windows checks the KDC certificate with it |
+| CRL of the root (empty) | DC: `/var/www/plc-crl/root-ca.crl` (DER) | `ca-create.sh`, valid 10 years | nginx serves it at `http://dc.ad.example.test/root-ca.crl`; Windows checks the intermediate with it (`ROOT_CRL_URL`) |
+| CRL for the KDC (revoked cards) | DC: `/var/www/plc-crl/intermediate-ca.crl.pem` (the PEM next to the DER file) | plp-admin (`card.crl.file`), written there directly | Samba KDC (`pkinit_revoke`), checks card certificates |
 | Card certificate + key | `smartcard-users.db`, table `smartcard_certs` (`key_pem`, `cert_pem`) | plp-admin (`SmartCardCert`) | the phone; the PKCS#12 is built per API request with a fresh random password |
 | CA in Windows | Root + NTAuth store on the client | manually / GPO | Windows validates chain |
 
-The pkinit directory contains exactly four files: `anchors.pem`, `kdc.pem`, `kdc.key`, `plc-test-ca.crl.pem`.
+The pkinit directory contains exactly three files: `anchors.pem`, `kdc.pem`, `kdc.key`. The CRL for the KDC lives in the web folder (see "Revoking").
 (The leftovers of an earlier self-signed attempt were deleted on 2026-10-21.)
 
 ### Logon flow
@@ -69,7 +70,7 @@ Samba is started by `samba-ad-dc.service` (`/usr/sbin/samba --foreground`) and r
        enable-pkinit   = yes
        pkinit_identity = FILE:/var/lib/samba/private/pkinit/kdc.pem,/var/lib/samba/private/pkinit/kdc.key
        pkinit_anchors  = FILE:/var/lib/samba/private/pkinit/anchors.pem
-       pkinit_revoke   = FILE:/var/lib/samba/private/pkinit/plc-test-ca.crl.pem
+       pkinit_revoke   = FILE:/var/www/plc-crl/intermediate-ca.crl.pem
    ```
    - `pkinit_identity` = the KDC's own ID (certificate + key)
    - `pkinit_anchors`  = the CAs the KDC trusts for *card* certificates
@@ -94,17 +95,37 @@ The CRL file format does not matter for `pkinit_revoke`: PEM and DER were both t
 (a revoked card is rejected). PEM is used. If it ever behaves differently after a Samba update, retest with a
 revoked card.
 
-### Revoking: getting the CRL to the KDC
+### Revoking: where the CRL lives
 
-plp-admin writes the CRL files itself (`card.crl.file`, see the README) but does not copy them anywhere. On the DC copy
-the PEM by hand to the file `pkinit_revoke` points at:
+In the lab plp-admin runs on the DC itself, so it writes the CRL directly into the folder that nginx serves, and the
+KDC reads the PEM from the same place. Nothing is copied.
+
+1. plp-admin (`smartcard.properties`, next to the JAR):
+   ```
+   card.crl.file=/var/www/plc-crl/intermediate-ca.crl
+   ```
+   plp-admin writes this DER file and `intermediate-ca.crl.pem` next to it. The file name is the one in `CRL_URL`.
+2. The service user (`phraselock`) must be allowed to write there:
+   ```sh
+   chown phraselock:phraselock /var/www/plc-crl
+   ```
+3. nginx (`/etc/nginx/sites-enabled/plc-crl.conf`) serves **only** the files that are listed, everything else is a 404.
+   Both CRLs have to be listed:
+   ```
+   location = /root-ca.crl         { default_type application/pkix-crl; }
+   location = /intermediate-ca.crl { default_type application/pkix-crl; }
+   ```
+   then `nginx -t && systemctl reload nginx`. `root-ca.crl` (from `ca-create.sh`) is copied into the folder once.
+4. `/etc/krb5.conf`, section `[kdc]`: `pkinit_revoke = FILE:/var/www/plc-crl/intermediate-ca.crl.pem`
+   (root reads it, no further permissions needed), then `systemctl restart samba-ad-dc`.
+
+The KDC re-reads the file on every logon, no restart after a revocation.
+
+If plp-admin runs on another machine, copy the PEM by hand to the file `pkinit_revoke` points at:
 
 ```sh
-scp certs/CA/smartcard/crl/plc-test-ca.crl.pem dc.ad.example.test:/var/lib/samba/private/pkinit/plc-test-ca.crl.pem
+scp certs/CA/smartcard/crl/intermediate-ca.crl.pem dc.ad.example.test:/var/www/plc-crl/intermediate-ca.crl.pem
 ```
-
-The KDC re-reads the file on every logon, no restart. When plp-admin runs on the DC itself, point `card.crl.file` at
-that location instead.
 
 ### Checking it yourself
 
@@ -117,12 +138,12 @@ sqlite3 smartcard-users.db "select cert_pem from smartcard_certs where username=
 openssl x509 -in a.crt -noout -fingerprint -sha256
 
 # what is in the CRL (revoked serials)? PEM: without -inform; DER: add -inform DER
-openssl crl -in plc-test-ca.crl.pem -noout -text
-openssl crl -in plc-test-ca.crl.pem -CAfile ca.crt -noout   # signature check
+openssl crl -in intermediate-ca.crl.pem -noout -text
+openssl crl -in intermediate-ca.crl.pem -CAfile intermediate-ca.crt -noout   # signature check
 
 # is the Windows CRL valid and served?
-openssl crl -inform DER -in plc-test-ca.crl -noout -issuer -lastupdate -nextupdate
-curl -sI http://dc.ad.example.test/plc-test-ca.crl
+openssl crl -inform DER -in intermediate-ca.crl -noout -issuer -lastupdate -nextupdate
+curl -sI http://dc.ad.example.test/intermediate-ca.crl
 
 # Windows: fetch and validate a certificate including CRL
 certutil -verify -urlfetch pluser1.cer

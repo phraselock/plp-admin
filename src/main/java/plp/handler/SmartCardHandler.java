@@ -170,6 +170,7 @@ public class SmartCardHandler
 
     config.routes.post("/admin/smartcard-user/cert/revoke",    ctx -> setRevoked(ctx, true));
     config.routes.post("/admin/smartcard-user/cert/reinstate", ctx -> setRevoked(ctx, false));
+    config.routes.post("/admin/smartcard-user/cert/delete",    ctx -> deleteRevokedCert(ctx));
 
     // CRL on startup, so the file exists before the first change
     try { SmartCardCert.load().writeCrl(); }
@@ -205,6 +206,27 @@ public class SmartCardHandler
       Log.i("[SmartCardHandler] Cert " + serial + (revoked ? " revoked" : " reinstated"));
       try { SmartCardCert.load().writeCrl(); }
       catch (Exception e) { Log.e("[SmartCardHandler] writeCrl: " + e.getMessage()); }
+    }
+    ctx.redirect(adminUrl(ctx, userId != null ? "?select=" + userId : ""));
+  }
+
+  /** Deletes a revoked certificate. Active certificates are refused (revoke first). The CRL is rewritten without its entry. */
+  private static void deleteRevokedCert(io.javalin.http.Context ctx)
+  {
+    String serial = ctx.formParam("serial");
+    String userId = ctx.formParam("user");
+    if (serial != null && !serial.isBlank())
+    {
+      if (SmartCardCertStore.getInstance().deleteRevoked(serial))
+      {
+        Log.i("[SmartCardHandler] Revoked cert " + serial + " deleted");
+        try { SmartCardCert.load().writeCrl(); }
+        catch (Exception e) { Log.e("[SmartCardHandler] writeCrl: " + e.getMessage()); }
+      }
+      else
+      {
+        Log.e("[SmartCardHandler] Cert " + serial + " not deleted (not found or not revoked)");
+      }
     }
     ctx.redirect(adminUrl(ctx, userId != null ? "?select=" + userId : ""));
   }

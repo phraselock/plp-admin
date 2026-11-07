@@ -100,6 +100,9 @@ uses CA, certificates and CRL is described in [docs/smartcard-lab-samba.md](docs
 5. **Revoke / Reinstate** changes the status and rewrites the CRL files (`card.crl.file`, DER, and
    `card.crl.file`.pem). plp-admin does not copy them anywhere: whoever validates the cards has to get the
    file (see [docs/smartcard-lab-samba.md](docs/smartcard-lab-samba.md) for the Samba lab DC).
+6. **Delete** (only on revoked rows, after a confirmation) removes the certificate with its key from the database. Its entry
+   also leaves the CRL, so the KDC accepts that certificate again if it has not expired. Delete only what you no longer
+   need to keep revoked.
 
 Buttons QR code / P12 are shown only for active certificates that have a stored key. Certificates issued
 before the key was stored show "–". Revoked is revoked: no QR code, no P12, and the API refuses them.
@@ -108,13 +111,18 @@ before the key was stored show "–". Revoked is revoked: no QR code, no P12, an
 
 `smartcard.properties` (defaults in `src/main/resources/`, overridden by the file next to the JAR / working directory):
 
-- `ca.cert` – CA certificate; the key is expected next to it (`ca.key`, PKCS#8 or traditional PEM)
+- `ca.cert`, `ca.key` – certificate and key of the CA that signs the cards, both named explicitly (PKCS#8 or
+  traditional PEM key). Single CA: `root-ca.crt` / `root-ca.key`; two-tier PKI: `intermediate-ca.crt` /
+  `intermediate-ca.key` (made by `scripts/smartcard/ca-create-intermediate.sh`)
+- `ca.chain` – optional, PEM with the certificates above `ca.cert` (`ca-chain.pem`: intermediate + root). They are
+  added to the PKCS#12. Leave blank without an intermediate. Certificates issued by plp-admin now always carry
+  Subject/Authority Key Identifier
 - `card.domain` – default UPN domain
 - `card.cert.type`, `card.cert.bits` – rsa / ecc and key size
 - `card.crl.file` – where the CRL is written (DER; a PEM copy gets the extra suffix `.pem`)
 - `card.crl.url` – optional CRL distribution point written into new card certificates. The Samba KDC does not
   use it (it reads the local file), and Windows only checks the KDC certificate here, so it can stay empty in
-  the lab. Set it (e.g. `http://dc.ad.example.test/plc-test-ca.crl`) when cards are also validated by
+  the lab. Set it (e.g. `http://dc.ad.example.test/intermediate-ca.crl`) when cards are also validated by
   something else, e.g. a real Windows DC. Certificates issued before it was set do not have it.
 - `card.token.ttl.minutes` – default validity of a QR token (can be overridden per QR code in the UI)
 

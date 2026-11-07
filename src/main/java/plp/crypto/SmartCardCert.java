@@ -6,6 +6,7 @@ import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.*;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
+import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
@@ -58,6 +59,7 @@ public class SmartCardCert
 
   private final Path   caCertPath;
   private final Path   caKeyPath;
+  private final Path   caChainPath;  // optional: PEM with the certificates above ca.cert (intermediate -> root)
   private final String certType;    // "rsa" or "ecc"
   private final int    certBits;
   private final String crlUrl;
@@ -89,8 +91,12 @@ public class SmartCardCert
   {
     String caCertStr = props.getProperty("ca.cert", "").trim();
     caCertPath  = ConfigPathResolver.resolve(caCertStr, SmartCardCert.class);
-    // key lives next to cert with .key extension
-    caKeyPath   = Path.of(caCertPath.toString().replaceAll("\\.crt$", ".key"));
+    String chainStr = props.getProperty("ca.chain", "").trim();
+    caChainPath = chainStr.isEmpty() ? null : ConfigPathResolver.resolve(chainStr, SmartCardCert.class);
+    String caKeyStr = props.getProperty("ca.key", "").trim();
+    if (caCertStr.isEmpty() || caKeyStr.isEmpty())
+      throw new IllegalStateException("smartcard.properties: ca.cert and ca.key must both be set");
+    caKeyPath   = ConfigPathResolver.resolve(caKeyStr, SmartCardCert.class);
     certType    = props.getProperty("card.cert.type", "rsa").trim().toLowerCase();
     certBits    = Integer.parseInt(props.getProperty("card.cert.bits", "2048").trim());
     crlUrl      = props.getProperty("card.crl.url", "").trim();
@@ -128,12 +134,31 @@ public class SmartCardCert
       .generateCertificate(new java.io.ByteArrayInputStream(certPem.getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
     X509Certificate ca   = CaKeyStore.load(caCertPath, caKeyPath).certificate();
 
+    // Chain: card certificate, issuing CA and - when ca.chain is set - the CAs above it.
+    // ca.chain may be the output of ca-create-intermediate.sh (ca-chain.pem: intermediate + root);
+    // the issuing CA itself is not added twice.
+    java.util.List<X509Certificate> chain = new java.util.ArrayList<>();
+    chain.add(cert);
+    chain.add(ca);
+    if (caChainPath != null)
+    {
+      var cf = java.security.cert.CertificateFactory.getInstance("X.509", "BC");
+      try (var in = Files.newInputStream(caChainPath))
+      {
+        for (var c : cf.generateCertificates(in))
+        {
+          X509Certificate x = (X509Certificate) c;
+          if (!x.equals(ca)) chain.add(x);
+        }
+      }
+    }
+
     String alias = new JcaX509CertificateHolder(cert).getSubject()
       .getRDNs(org.bouncycastle.asn1.x500.style.BCStyle.CN)[0].getFirst().getValue().toString();
 
     KeyStore pkcs12 = KeyStore.getInstance("PKCS12", "BC");
     pkcs12.load(null, null);
-    pkcs12.setKeyEntry(alias, key, password.toCharArray(), new X509Certificate[]{cert, ca});
+    pkcs12.setKeyEntry(alias, key, password.toCharArray(), chain.toArray(new X509Certificate[0]));
     ByteArrayOutputStream buf = new ByteArrayOutputStream();
     pkcs12.store(buf, password.toCharArray());
     return buf.toByteArray();
@@ -173,6 +198,8 @@ public class SmartCardCert
     Instant    now = Instant.now();
     var builder = new JcaX509v2CRLBuilder(ca.certificate(), Date.from(now));
     builder.setNextUpdate(Date.from(now.plus(Duration.ofDays(3650))));
+    builder.addExtension(Extension.authorityKeyIdentifier, false,
+      new JcaX509ExtensionUtils().createAuthorityKeyIdentifier(ca.certificate()));
     builder.addExtension(Extension.cRLNumber, false, new CRLNumber(BigInteger.valueOf(now.getEpochSecond())));
 
     DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -226,6 +253,11 @@ public class SmartCardCert
       subject, publicKey);
 
     builder.addExtension(Extension.basicConstraints, false, new BasicConstraints(false));
+
+    // Key identifiers let a verifier find the issuer unambiguously (needed with an intermediate)
+    var extUtils = new JcaX509ExtensionUtils();
+    builder.addExtension(Extension.subjectKeyIdentifier, false, extUtils.createSubjectKeyIdentifier(publicKey));
+    builder.addExtension(Extension.authorityKeyIdentifier, false, extUtils.createAuthorityKeyIdentifier(ca.certificate()));
 
     int ku = "ecc".equals(certType)
       ? KeyUsage.digitalSignature | KeyUsage.keyAgreement
