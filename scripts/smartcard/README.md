@@ -91,15 +91,24 @@ Required by Kerberos for SmartCard pre-authentication:
 
 Before SmartCard logon works:
 
-1. Import the CA certificates (on the domain controller, or for the whole domain with the `-dspublish` variant
-   or Group Policy). **Single CA** (no intermediate): `root-ca.crt` goes into **Root** and **NTAuth**.
-   **Two-tier**: the root and the issuing CA go to different places:
+1. Import the CA certificates on the Windows PC (elevated prompt). **Single CA** (no intermediate): `root-ca.crt`
+   goes into **Root** and **NTAuth**. **Two-tier**: the root and the issuing CA go to different places:
 
    | Certificate | Store | Command (elevated prompt) |
    |---|---|---|
-   | root (`root-ca.crt`) | Trusted Root | `certutil -addstore -f Root root-ca.crt` (domain: `certutil -dspublish -f root-ca.crt RootCA`) |
-   | intermediate (`intermediate-ca.crt`) | Intermediate CAs | `certutil -addstore -f CA intermediate-ca.crt` (domain: `certutil -dspublish -f intermediate-ca.crt SubCA`) |
-   | intermediate (`intermediate-ca.crt`) | NTAuth (the CA that issues the cards) | `certutil -dspublish -f intermediate-ca.crt NTAuthCA` |
+   | root (`root-ca.crt`) | Trusted Root | `certutil -addstore -f Root root-ca.crt` |
+   | intermediate (`intermediate-ca.crt`) | Intermediate CAs | `certutil -addstore -f CA intermediate-ca.crt` |
+   | intermediate (`intermediate-ca.crt`) | NTAuth (the CA that issues the cards) | `certutil -enterprise -addstore NTAuth intermediate-ca.crt` |
+
+   This is the way for the **Samba lab domain**: it writes into the local store of the PC. For a **Microsoft AD
+   domain** the certificates can instead be published to the whole domain with `certutil -dspublish -f <file> RootCA`
+   / `SubCA` / `NTAuthCA` (needs Enterprise Admin rights; does not apply to the Samba lab) or distributed by Group Policy.
+   To look at a store use `certutil -store` / `certutil -enterprise -store NTAuth`; never `-viewdelstore`, it **deletes**.
+
+   Do this **after** the PC has joined the domain. If the certificates were imported before the join, run the
+   NTAuth command again afterwards: on 2026-11-13 the entry was missing or ineffective after the join and the logon
+   failed with "untrusted certification authority" (`0xC000038A`); importing it again fixed it. The full PC setup
+   order is in `docs/domain-logon.md` of the UMDF project.
 
    The root does not go into NTAuth. On the Samba KDC `anchors.pem` holds the **root**, and `kdc.pem` should
    contain the KDC certificate followed by the intermediate so that Windows can build the chain.
