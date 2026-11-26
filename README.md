@@ -78,6 +78,20 @@ Run it again to update: existing settings are offered as defaults, the admin tok
 
 ---
 
+### Switching to another JAR by hand
+
+The service always starts `plp-admin.jar`, a symlink to the versioned JAR. After copying a new
+`plp-admin-<version>.jar` into `/opt/phraselock/admin`, point the link to the highest version and
+restart the service with:
+
+```bash
+sudo scripts/link-latest-jar.sh                         # /opt/phraselock/admin, plp-admin
+sudo scripts/link-latest-jar.sh /opt/phraselock/fido2   # works the same for plp-fido2
+```
+
+To go back, delete or rename the newer JAR and run it again, or set the link yourself
+(`ln -sfn plp-admin-<version>.jar plp-admin.jar`).
+
 ## SmartCard certificates
 
 plp-admin issues the certificates for the virtual smartcard on the phone: one per user, with its own card GUID,
