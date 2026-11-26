@@ -92,10 +92,13 @@ uses CA, certificates and CRL is described in [docs/smartcard-lab-samba.md](docs
    `smartcard-users.db`. Nothing else happens.
 2. **QR code** (per certificate row, QR valid for N minutes) creates an enrollment token for exactly that
    certificate and shows the JSON `{"smartcard":{"token":"…","upn":"…","guid":"…"}}` (the guid is created when the certificate is issued and stored with it) plus the QR code. Only one token
-   per user exists: a new one replaces the older. A token is never consumed, it only expires.
+   per user exists: a new one replaces the older. By default a token is not consumed and only expires;
+   with `card.token.singleuse=true` it works for exactly one successful delivery.
 3. The phone calls `POST /api/mqtt/v1/validate/smartcard` with `devId`, `qrc` (pairing check against plp-core)
    and `token`. The answer carries `crt` (hex PKCS#12), `pwd` (fresh random password), `upn`, `valid`, `ccrt`.
-   The PKCS#12 is built per request; the call changes nothing in the database. Revoked certificates are refused.
+   The PKCS#12 is built per request and not stored. Revoked certificates are refused. With
+   `card.key.delete.after.enrollment=true` the private key is deleted from the database right after this
+   delivery; the certificate stays (list, CRL), QR code and P12 are then no longer available for it.
 4. **P12** (per certificate row) downloads the PKCS#12 with a password you type in; nothing is stored.
 5. **Revoke / Reinstate** changes the status and rewrites the CRL files (`card.crl.file`, DER, and
    `card.crl.file`.pem). plp-admin does not copy them anywhere: whoever validates the cards has to get the
@@ -125,8 +128,12 @@ before the key was stored show "–". Revoked is revoked: no QR code, no P12, an
   the lab. Set it (e.g. `http://dc.ad.example.test/intermediate-ca.crl`) when cards are also validated by
   something else, e.g. a real Windows DC. Certificates issued before it was set do not have it.
 - `card.token.ttl.minutes` – default validity of a QR token (can be overridden per QR code in the UI)
+- `card.token.singleuse` – `true`: a QR token works for exactly one delivery; `false` (default): reusable until it expires
+- `card.key.delete.after.enrollment` – `true`: delete the card's private key from the database after delivery to the
+  phone, so it exists only in the phone's keystore (a new phone then needs a new certificate); `false` (default): keep it
 
-The private key of each card is stored unencrypted in `smartcard-users.db`, so protect that file
+The private key of each card is stored unencrypted in `smartcard-users.db` (unless
+`card.key.delete.after.enrollment=true` removes it after delivery), so protect that file
 (the server generates the key because the phone side is endpoint-agnostic and iOS cannot create RSA CSRs).
 
 ---

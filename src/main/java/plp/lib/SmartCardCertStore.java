@@ -131,6 +131,22 @@ public class SmartCardCertStore
     catch (Exception e) { Log.e("[SmartCardCertStore] deleteRevoked: " + e.getMessage()); return false; }
   }
 
+  /**
+   * Removes the stored private key of a certificate; the certificate itself stays for the list
+   * and the CRL. Afterwards QR code and P12 are no longer available for it.
+   */
+  public boolean removeKey(String serialHex)
+  {
+    try (Connection conn = DriverManager.getConnection(dbUrl);
+         PreparedStatement ps = conn.prepareStatement(
+           "UPDATE smartcard_certs SET key_pem = NULL WHERE serial_hex = ?"))
+    {
+      ps.setString(1, serialHex);
+      return ps.executeUpdate() > 0;
+    }
+    catch (Exception e) { Log.e("[SmartCardCertStore] removeKey: " + e.getMessage()); return false; }
+  }
+
   public Cert findBySerial(String serialHex)
   {
     List<Cert> l = query("WHERE serial_hex = ?", serialHex);

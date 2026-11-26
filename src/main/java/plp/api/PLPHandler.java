@@ -8,6 +8,7 @@ import plp.config.AppConfig;
 import plp.crypto.IClientCertIssuer;
 import plp.crypto.SmartCardCert;
 import plp.lib.SmartCardCertStore;
+import plp.lib.SmartCardConfig;
 import plp.lib.SmartCardTokenStore;
 import plp.lib.SmartCardUserStore;
 import plp.service.JwtService;
@@ -157,6 +158,16 @@ public class PLPHandler
     byte[] p12 = SmartCardCert.load().buildPkcs12(kc.keyPem(), kc.certPem(), pwd);
 
     Log.i("[smartCard] Delivered cert for " + meta.upn());
+
+    // optional, set by the admin in smartcard.properties
+    if (SmartCardConfig.tokenSingleUse())
+    {
+      SmartCardTokenStore.getInstance().markUsed(token);
+    }
+    if (SmartCardConfig.deleteKeyAfterEnrollment() && certs.removeKey(entry.serialHex()))
+    {
+      Log.i("[smartCard] Private key removed after delivery for " + meta.upn());
+    }
     return new PLPResponse()
       .set("crt",   HexFormat.of().formatHex(p12))
       .set("pwd",   pwd)

@@ -89,19 +89,21 @@ public class SmartCardTokenStore
 
   /**
    * Returns the user and certificate serial the token points to, or null when the token is
-   * unknown or expired. Tokens are never consumed; they just expire.
+   * unknown, expired or already used (see markUsed; only with card.token.singleuse=true).
    */
   public Entry resolve(String token)
   {
     try (Connection conn = DriverManager.getConnection(dbUrl);
          PreparedStatement ps = conn.prepareStatement(
-           "SELECT username, serial_hex, expires_at FROM smartcard_tokens WHERE token = ?"))
+           "SELECT username, serial_hex, expires_at, used_at FROM smartcard_tokens WHERE token = ?"))
     {
       ps.setString(1, token);
       try (ResultSet rs = ps.executeQuery())
       {
         if (!rs.next()) return null;
         if (rs.getLong("expires_at") < System.currentTimeMillis()) return null;
+        rs.getLong("used_at");
+        if (!rs.wasNull()) return null;
         String serial = rs.getString("serial_hex");
         if (serial == null) return null;
         return new Entry(rs.getString("username"), serial);
@@ -109,5 +111,19 @@ public class SmartCardTokenStore
     }
     catch (Exception e) { Log.e("[SmartCardTokenStore] resolve: " + e.getMessage()); }
     return null;
+  }
+
+  /** Marks the token as used, so resolve() refuses it from now on (single-use tokens). */
+  public void markUsed(String token)
+  {
+    try (Connection conn = DriverManager.getConnection(dbUrl);
+         PreparedStatement ps = conn.prepareStatement(
+           "UPDATE smartcard_tokens SET used_at = ? WHERE token = ?"))
+    {
+      ps.setLong(1, System.currentTimeMillis());
+      ps.setString(2, token);
+      ps.executeUpdate();
+    }
+    catch (Exception e) { Log.e("[SmartCardTokenStore] markUsed: " + e.getMessage()); }
   }
 }
